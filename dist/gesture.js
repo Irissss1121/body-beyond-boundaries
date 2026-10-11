@@ -2,14 +2,18 @@
  * BodyPose adapter and gesture logic, with no browser or network dependencies.
  * All returned x/y values are camera coordinates normalized to 0..1.
  *
- * normalizePose(pose, width, height) accepts ml5 BodyPose keypoints (name/x/y/
+ * normalizePose(pose, width, height, options?) accepts ml5 BodyPose keypoints (name/x/y/
  * confidence), PoseNet {pose:{keypoints}}, or named leftWrist/rightWrist points.
  * It returns {hands:[{side,x,y,confidence,raised}], shoulders:{left,right,
  * center,width}|null}. shoulders.width is shoulder distance / image width.
+ * options.wristConfidence defaults to .2; shoulderConfidence defaults to .3.
  *
  * WaveDetector.update(pose,width,height,nowMs) returns {waving,energy,hands,
  * handY,updatedAt}. updateHands(hands,nowMs,shoulderWidth=0.24) accepts the same
  * normalized hand objects; confidence defaults to 1 and raised to true.
+ * The constructor accepts wristConfidence/shoulderConfidence and holdMs (600
+ * by default, capped at 650). energy measures tracked wrist movement even
+ * below the chest; waving still requires a raised hand and two reversals.
  *
  * SharedPresence.update(local,remote,nowMs) returns {connected,level,mutual,
  * progress}. Both inputs must have waving and a numeric receivedAt or updatedAt
@@ -20,9 +24,11 @@
 const clamp = (value, low = 0, high = 1) => Math.min(high, Math.max(low, value));
 const finite = Number.isFinite;
 const canonicalName = (name = '') => String(name).replace(/[_\s-]/g, '').toLowerCase();
-const MIN_CONFIDENCE = 0.35;
+const WRIST_CONFIDENCE = 0.2;
+const SHOULDER_CONFIDENCE = 0.3;
+const confidenceThreshold = (value, fallback) => finite(value) ? clamp(value) : fallback;
 
-function readPoint(pose, name) {
+function readPoint(pose, name, minimumConfidence) {
   const expected = canonicalName(name);
   const keypoints = Array.isArray(pose.keypoints) ? pose.keypoints : [];
   const point = keypoints.find((entry) => canonicalName(entry.name || entry.part) === expected)
@@ -31,17 +37,19 @@ function readPoint(pose, name) {
   if (!point) return null;
   const position = point.position || point;
   const confidence = point.confidence ?? point.score ?? 1;
-  if (!finite(position.x) || !finite(position.y) || !finite(confidence) || confidence < MIN_CONFIDENCE) return null;
+  if (!finite(position.x) || !finite(position.y) || !finite(confidence) || confidence < minimumConfidence) return null;
   return { x: position.x, y: position.y, confidence: clamp(confidence) };
 }
 
-export function normalizePose(input, width, height) {
+export function normalizePose(input, width, height, { wristConfidence = WRIST_CONFIDENCE, shoulderConfidence = SHOULDER_CONFIDENCE } = {}) {
   const pose = input?.pose || input;
   if (!pose || !finite(width) || !finite(height) || width <= 0 || height <= 0) {
     return { hands: [], shoulders: null };
   }
-  const left = readPoint(pose, 'leftShoulder');
-  const right = readPoint(pose, 'rightShoulder');
+  const shoulderMinimum = confidenceThreshold(shoulderConfidence, SHOULDER_CONFIDENCE);
+  const wristMinimum = confidenceThreshold(wristConfidence, WRIST_CONFIDENCE);
+  const left = readPoint(pose, 'leftShoulder', shoulderMinimum);
+  const right = readPoint(pose, 'rightShoulder', shoulderMinimum);
   const shoulderDistance = left && right ? Math.hypot(left.x - right.x, left.y - right.y) : width * 0.24;
   const shoulderY = left && right ? (left.y + right.y) / 2 : height * 0.43;
   const normalizePoint = (point) => ({ x: clamp(point.x / width), y: clamp(point.y / height), confidence: point.confidence });
@@ -52,7 +60,7 @@ export function normalizePose(input, width, height) {
     width: clamp(shoulderDistance / width, 0.08, 0.65),
   } : null;
   const hands = ['left', 'right'].flatMap((side) => {
-    const wrist = readPoint(pose, `${side}Wrist`);
+    const wrist = readPoint(pose, `${side}Wrist`, wristMinimum);
     if (!wrist) return [];
     return [{ ...normalizePoint(wrist), side, raised: wrist.y <= shoulderY + shoulderDistance * 0.55 }];
   });
@@ -60,9 +68,11 @@ export function normalizePose(input, width, height) {
 }
 
 export class WaveDetector {
-  constructor({ holdMs = 450, reversalWindowMs = 1150 } = {}) {
+  constructor({ holdMs = 600, reversalWindowMs = 1150, wristConfidence = WRIST_CONFIDENCE, shoulderConfidence = SHOULDER_CONFIDENCE } = {}) {
     this.holdMs = clamp(holdMs, 0, 650);
     this.reversalWindowMs = reversalWindowMs;
+    this.wristConfidence = confidenceThreshold(wristConfidence, WRIST_CONFIDENCE);
+    this.shoulderConfidence = confidenceThreshold(shoulderConfidence, SHOULDER_CONFIDENCE);
     this.reset();
   }
 
@@ -72,7 +82,7 @@ export class WaveDetector {
   }
 
   update(pose, width, height, nowMs) {
-    const normalized = normalizePose(pose, width, height);
+    const normalized = normalizePose(pose, width, height, this);
     return this.updateHands(normalized.hands, nowMs, normalized.shoulders?.width || 0.24);
   }
 
@@ -83,7 +93,7 @@ export class WaveDetector {
     const hands = (Array.isArray(input) ? input : []).flatMap((hand, index) => {
       if (!hand || !finite(hand.x) || !finite(hand.y)) return [];
       const confidence = hand.confidence ?? 1;
-      if (!finite(confidence) || confidence < MIN_CONFIDENCE) return [];
+      if (!finite(confidence) || confidence < this.wristConfidence) return [];
       return [{ side: hand.side || (index ? 'right' : 'left'), x: clamp(hand.x), y: clamp(hand.y), confidence: clamp(confidence), raised: hand.raised !== false }];
     });
     const scale = finite(shoulderWidth) ? clamp(shoulderWidth, 0.08, 0.65) : 0.24;
@@ -94,20 +104,26 @@ export class WaveDetector {
     let energy = 0;
 
     for (const hand of hands) {
-      if (!hand.raised) {
-        this.trackers.delete(hand.side);
-        continue;
-      }
       activeSides.add(hand.side);
       let track = this.trackers.get(hand.side);
       if (!track) {
-        track = { x: hand.x, y: hand.y, anchor: hand.x, extreme: hand.x, direction: 0, reversals: [], lastAt: nowMs, lastWaveAt: -Infinity, energy: 0 };
+        track = { x: hand.x, y: hand.y, anchor: hand.x, extreme: hand.x, direction: 0, reversals: [], lastAt: nowMs, lastWaveAt: -Infinity, energy: 0, raised: hand.raised };
         this.trackers.set(hand.side, track);
         continue;
       }
+      // Preserve motion energy across raised/lowered transitions, but a lowered
+      // hand clears wave history immediately and cannot keep a connection alive.
+      if (track.raised !== hand.raised) {
+        track.anchor = track.x;
+        track.extreme = track.x;
+        track.direction = 0;
+        track.reversals = [];
+        track.lastWaveAt = -Infinity;
+        track.raised = hand.raised;
+      }
       const elapsed = nowMs - track.lastAt;
       if (elapsed <= 0) {
-        waving ||= nowMs - track.lastWaveAt <= this.holdMs;
+        waving ||= hand.raised && nowMs - track.lastWaveAt <= this.holdMs;
         energy = Math.max(energy, track.energy);
         continue;
       }
@@ -120,6 +136,8 @@ export class WaveDetector {
       track.energy += (clamp(speed / 3.5) - track.energy) * (1 - Math.exp(-elapsed / 130));
       track.lastAt = nowMs;
       track.reversals = track.reversals.filter((time) => nowMs - time <= this.reversalWindowMs);
+      energy = Math.max(energy, track.energy);
+      if (!hand.raised) continue;
 
       let reversed = false;
       if (!track.direction) {
@@ -139,7 +157,6 @@ export class WaveDetector {
       // Refresh only on a NEW reversal; old history must not keep a still hand active.
       if (reversed && track.reversals.length >= 2) track.lastWaveAt = nowMs;
       waving ||= nowMs - track.lastWaveAt <= this.holdMs;
-      energy = Math.max(energy, track.energy);
     }
 
     for (const side of this.trackers.keys()) {

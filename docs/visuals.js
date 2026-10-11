@@ -131,7 +131,7 @@ export function createVisuals(container, getState) {
             centerY + Math.sin(t * 2 + phase) * radius * 0.27 + Math.sin(t) * radius * 0.43 * (0.55 + offset * 0.65),
           ]);
         }
-        glow(color, 9 + energy * (23 + offset * 36), 3 + energy * 6, 0.6 + energy * 0.25);
+        glow(color, 16 + energy * (37 + offset * 58), 3 + energy * 6, 0.6 + energy * 0.25);
         curve(points);
       }
       // Tiny trailing signals stay close to their author's half of the space.
@@ -220,8 +220,8 @@ export function createVisuals(container, getState) {
         const a = (state.role === 'B' ? state.remote : state.local) || {};
         const b = (state.role === 'B' ? state.local : state.remote) || {};
         const smoothing = 1 - Math.pow(0.89, delta);
-        pinkEnergy = mix(pinkEnergy, a.waving ? Math.max(0.25, clamp(a.energy)) : 0, smoothing);
-        blueEnergy = mix(blueEnergy, b.waving ? Math.max(0.25, clamp(b.energy)) : 0, smoothing);
+        pinkEnergy = mix(pinkEnergy, Math.max(clamp(a.energy), a.waving ? 0.25 : 0), smoothing);
+        blueEnergy = mix(blueEnergy, Math.max(clamp(b.energy), b.waving ? 0.25 : 0), smoothing);
         const target = state.presence?.connected
           ? Math.max(0.55, clamp(state.presence?.level))
           : clamp(state.presence?.level);

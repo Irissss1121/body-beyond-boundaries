@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#080910">
   <title>Beyond the Body</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2">
   <script defer src="https://cdn.jsdelivr.net/npm/p5@1.11.11/lib/p5.min.js"></script>
   <script defer src="vendor/socket.io.js"></script>
   <script defer src="vendor/simplepeer.min.js"></script>
   <script defer src="vendor/p5livemedia.js"></script>
-  <script type="module" src="app.js"></script>
+  <script type="module" src="app.js?v=2"></script>
 </head>
 <body>
   <main id="installation">
@@ -27,24 +27,25 @@
         <button class="role role-a" id="join-a" data-role="A" type="button" aria-label="Join as A, pink"><span class="role-letter">A</span><span class="role-color"><i></i>PINK</span><span class="role-arrow" aria-hidden="true">↗</span></button>
         <button class="role role-b" id="join-b" data-role="B" type="button" aria-label="Join as B, blue"><span class="role-letter">B</span><span class="role-color"><i></i>BLUE</span><span class="role-arrow" aria-hidden="true">↗</span></button>
       </div>
-      <p class="intro">Open this link on both computers. Choose different colors.<br>Allow your camera, then wave to each other.</p>
+      <p class="intro">Open this link on both computers. Choose different colors.<br>Allow your camera, then move together.</p>
+      <button class="demo-link" id="start-demo" type="button">Preview demo ↗</button>
       <p class="form-error" id="setup-error" role="alert" hidden></p>
       <button class="fallback-button" id="use-keyboard" type="button" hidden>Try without camera</button>
     </section>
 
     <section class="session-hud" id="session-hud" hidden>
-      <div class="participant self"><span class="tiny-label">YOU</span><div><i id="self-dot"></i><strong id="self-name">A · PINK</strong></div><span id="self-status">Raise a hand and wave</span></div>
+      <div class="participant self"><span class="tiny-label">YOU</span><div><i id="self-dot"></i><strong id="self-name">A · PINK</strong></div><span id="self-status">Move your body</span></div>
       <div class="connection-state" aria-live="polite"><span class="tiny-label" id="phase-label">01 / SEPARATION</span><h2 id="phase-title">Reach across the space.</h2><p id="phase-caption">Waiting for the other presence</p><div class="progress-track"><span id="connection-progress"></span></div></div>
       <div class="participant other"><span class="tiny-label">OTHER</span><div><i id="other-dot"></i><strong id="other-name">B · BLUE</strong></div><span id="other-status">Waiting to join</span></div>
     </section>
 
     <footer class="controls" id="controls" hidden>
-      <p id="gesture-guide">Raise one hand and wave from side to side.<br><span>Purple appears only when you both wave.</span></p>
-      <button id="leave" type="button">Change presence</button>
+      <p id="gesture-guide">Move your hands, arms, or upper body.<br><span>Purple appears when you both move at the same time.</span></p>
+      <div class="control-actions"><button id="demo-toggle" type="button">Demo</button><button id="leave" type="button">Change presence</button></div>
     </footer>
-    <div id="preview" class="camera-source" aria-hidden="true"><video id="camera" width="640" height="480" autoplay muted playsinline></video><canvas id="pose-overlay" width="640" height="480" hidden></canvas></div>
+    <aside id="preview" class="camera-source" hidden><div class="camera-view"><video id="camera" width="640" height="480" autoplay muted playsinline></video><canvas id="pose-overlay" width="640" height="480"></canvas></div><p id="tracking-hint">Only your camera · Move in frame</p></aside>
     <div id="loading" role="status" hidden><span class="spinner"></span><p id="loading-text">Opening your camera…</p><button id="cancel-loading" type="button">Cancel</button></div>
-    <button id="wave-button" type="button" hidden>Hold to wave</button>
+    <button id="wave-button" type="button" hidden>Hold to move</button>
     <div id="toast" role="status" hidden></div>
   </main>
 </body>

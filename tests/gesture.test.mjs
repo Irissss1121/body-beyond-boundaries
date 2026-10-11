@@ -17,7 +17,7 @@ test('normalizes current ml5 keypoints and rejects low-confidence wrists', () =>
     { name: 'left_shoulder', x: 220, y: 210, confidence: 0.8 },
     { name: 'right_shoulder', x: 420, y: 210, confidence: 0.9 },
     { name: 'left_wrist', x: 160, y: 80, confidence: 0.9 },
-    { name: 'right_wrist', x: 540, y: 370, confidence: 0.2 },
+    { name: 'right_wrist', x: 540, y: 370, confidence: 0.19 },
   ] };
   const result = normalizePose(pose, 640, 480);
   assert.equal(result.hands.length, 1);
@@ -66,8 +66,52 @@ test('small tracking jitter, lowered hands, missing pose and weak confidence do 
   detector.reset();
   assert.equal(wave(detector).waving, true);
   assert.equal(detector.updateHands([], 1850).waving, false);
-  assert.equal(detector.updateHands(hand(0.6, { confidence: 0.2 }), 1900).waving, false);
+  assert.equal(detector.updateHands(hand(0.6, { confidence: 0.19 }), 1900).waving, false);
   assert.equal(detector.update(null, 640, 480, 1950).hands.length, 0);
+});
+
+test('moderately confident wrists remain visible while shoulder confidence stays separate', () => {
+  const pose = { keypoints: [
+    { name: 'left_shoulder', x: 220, y: 210, confidence: 0.32 },
+    { name: 'right_shoulder', x: 420, y: 210, confidence: 0.32 },
+    { name: 'left_wrist', x: 160, y: 80, confidence: 0.25 },
+  ] };
+  const result = normalizePose(pose, 640, 480);
+  assert.equal(result.hands.length, 1);
+  assert.equal(result.hands[0].confidence, 0.25);
+  assert.ok(result.shoulders);
+  assert.equal(normalizePose(pose, 640, 480, { wristConfidence: 0.35 }).hands.length, 0);
+  assert.equal(normalizePose(pose, 640, 480, { shoulderConfidence: 0.35 }).shoulders, null);
+  assert.equal(new WaveDetector().update(pose, 640, 480, 0).hands.length, 1);
+  assert.equal(new WaveDetector({ wristConfidence: 0.35 }).update(pose, 640, 480, 0).hands.length, 0);
+});
+
+test('one-way motion gives solo energy without qualifying as a wave', () => {
+  const detector = new WaveDetector();
+  let state;
+  for (let index = 0; index <= 20; index++) {
+    state = detector.updateHands(hand(0.2 + index * 0.02, { confidence: 0.25 }), index * 50);
+    assert.equal(state.waving, false);
+  }
+  assert.ok(state.energy > 0.2 && state.energy <= 1);
+});
+
+test('lowered wrist motion gives energy but cannot wave or build a shared connection', () => {
+  const detector = new WaveDetector();
+  const presence = new SharedPresence();
+  let state;
+  for (let index = 0; index <= 36; index++) {
+    const now = index * 50;
+    state = detector.updateHands(hand(0.5 + 0.15 * Math.sin(index * Math.PI / 6), { raised: false, y: 0.75 }), now);
+    assert.equal(state.waving, false);
+    assert.equal(presence.update(state, { waving: true, receivedAt: now }, now).connected, false);
+  }
+  assert.ok(state.energy > 0.2);
+  detector.reset();
+  assert.equal(wave(detector).waving, true);
+  const lowered = detector.updateHands(hand(0.5, { raised: false, y: 0.75 }), 1850);
+  assert.equal(lowered.waving, false);
+  assert.ok(lowered.energy > 0);
 });
 
 test('connection requires two fresh waves sustained for 200ms', () => {

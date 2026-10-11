@@ -52,7 +52,14 @@ h1{font-family:Manrope,sans-serif;font-size:clamp(26px,3vw,34px);line-height:1.2
 .controls p span{color:#857891}
 #leave{font-size:10px;padding:10px 14px;white-space:nowrap;background:#ffffff04;border:1px solid #ffffff18;border-radius:4px;color:#b3a7bd}
 #leave:hover{background:#ffffff0b;color:#ece0f4}
-.camera-source{position:fixed;left:-10000px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none}
+.camera-source{position:absolute;z-index:3;left:4vw;bottom:104px;width:165px;padding:5px;background:#0c0d17;border:1px solid #ffffff14;border-radius:5px;pointer-events:none}
+.camera-view{position:relative;aspect-ratio:4/3;overflow:hidden;border-radius:2px}
+.camera-view video,.camera-view canvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1)}
+.camera-source p{font-size:8px;line-height:1.5;color:#aa99bc;margin:6px 2px 1px;text-align:center}
+.demo-link{margin-top:20px;background:transparent;color:#c7afdd;font-size:11px;text-decoration:underline;text-underline-offset:4px}
+.control-actions{display:flex;gap:8px;align-items:center}
+#demo-toggle{font-size:10px;padding:10px 14px;white-space:nowrap;background:#b996e610;border:1px solid #b996e644;border-radius:4px;color:#d0b5ed}
+@media(max-width:640px){.camera-source{left:22px;bottom:119px;width:124px}.controls{align-items:flex-end;flex-wrap:wrap}.control-actions{gap:5px}#demo-toggle{font-size:9px;padding:9px 10px}.controls p{max-width:190px}}
 #loading{position:absolute;z-index:6;inset:0;background:#080910e8;backdrop-filter:blur(15px);display:flex;align-items:center;justify-content:center;flex-direction:column}
 #loading p{font-size:13px;color:#bfb0d2}
 #cancel-loading{background:transparent;color:#a394b0;font-size:11px;margin-top:12px}
